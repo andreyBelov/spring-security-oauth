@@ -1,9 +1,12 @@
 package com.baeldung.config;
 
+import java.io.IOException;
 import java.util.Arrays;
 
 import javax.sql.DataSource;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
@@ -12,6 +15,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
 import org.springframework.context.annotation.PropertySource;
 import org.springframework.core.env.Environment;
+import org.springframework.core.io.ByteArrayResource;
 import org.springframework.core.io.Resource;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.jdbc.datasource.init.DataSourceInitializer;
@@ -29,11 +33,14 @@ import org.springframework.security.oauth2.provider.token.TokenEnhancer;
 import org.springframework.security.oauth2.provider.token.TokenEnhancerChain;
 import org.springframework.security.oauth2.provider.token.TokenStore;
 import org.springframework.security.oauth2.provider.token.store.JdbcTokenStore;
+import org.springframework.util.FileCopyUtils;
 
 //@Configuration
 //@PropertySource({ "classpath:persistence.properties" })
 //@EnableAuthorizationServer
 public class OAuth2AuthorizationServerConfig extends AuthorizationServerConfigurerAdapter {
+
+    private final Logger logger = LoggerFactory.getLogger(this.getClass());
 
     @Autowired
     private Environment env;
@@ -92,8 +99,19 @@ public class OAuth2AuthorizationServerConfig extends AuthorizationServerConfigur
     private DatabasePopulator databasePopulator() {
         final ResourceDatabasePopulator populator = new ResourceDatabasePopulator();
         populator.addScript(schemaScript);
-        populator.addScript(dataScript);
+        populator.addScript(encryptClientSecrets(dataScript));
         return populator;
+    }
+
+    private Resource encryptClientSecrets(Resource dataScript) {
+        try {
+            String dataSql = new String(FileCopyUtils.copyToByteArray(dataScript.getInputStream()));
+            dataSql = dataSql.replace("\'secret\'", "\'" + passwordEncoder().encode("secret") + "\'");
+            return new ByteArrayResource(dataSql.getBytes());
+        } catch (IOException e) {
+            logger.error("Error occured in databasePopulator creation", e);
+        }
+        return dataScript;
     }
 
     @Bean
